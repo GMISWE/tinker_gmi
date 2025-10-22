@@ -11,12 +11,16 @@ Configure your SDK to point to this server:
 """
 
 import asyncio
+import gzip
+import io
+import tarfile
 import time
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Mock Tinker API Server", version="0.1.0")
@@ -24,6 +28,8 @@ app = FastAPI(title="Mock Tinker API Server", version="0.1.0")
 # In-memory storage
 futures_store: Dict[str, Dict[str, Any]] = {}
 models_store: Dict[str, Dict[str, Any]] = {}
+training_runs_store: Dict[str, Dict[str, Any]] = {}  # training_run_id -> training run metadata
+checkpoints_store: Dict[str, List[Dict[str, Any]]] = {}  # training_run_id -> list of checkpoints
 
 
 # ============================================================================
@@ -239,13 +245,29 @@ async def create_model(
     verify_api_key(x_api_key)
 
     model_id = f"model_{uuid.uuid4().hex[:8]}"
+    created_at = time.time()
 
+    # Store in models_store for backward compatibility
     models_store[model_id] = {
         "model_id": model_id,
         "base_model": request.base_model,
         "lora_config": request.lora_config.dict() if request.lora_config else None,
-        "created_at": time.time(),
+        "created_at": created_at,
     }
+
+    # Store full training run metadata
+    training_runs_store[model_id] = {
+        "training_run_id": model_id,
+        "base_model": request.base_model,
+        "model_owner": "test-user",
+        "is_lora": request.lora_config is not None,
+        "lora_rank": request.lora_config.rank if request.lora_config else None,
+        "corrupted": False,
+        "last_request_time": datetime.fromtimestamp(created_at).isoformat() + "Z",
+    }
+
+    # Initialize checkpoints list for this training run
+    checkpoints_store[model_id] = []
 
     result = {
         "model_id": model_id,
@@ -470,7 +492,18 @@ async def save_weights(
     """Save the current model weights to disk."""
     verify_api_key(x_api_key)
 
-    path = request.path or f"tinker://{request.model_id}/checkpoint_{int(time.time())}"
+    checkpoint_name = request.path or f"checkpoint_{int(time.time())}"
+    path = f"tinker://{request.model_id}/weights/{checkpoint_name}"
+
+    # Store checkpoint metadata
+    if request.model_id in checkpoints_store:
+        checkpoint_id = f"weights/{checkpoint_name}"
+        checkpoints_store[request.model_id].append({
+            "checkpoint_id": checkpoint_id,
+            "checkpoint_type": "training",
+            "time": datetime.now().isoformat() + "Z",
+            "tinker_path": path,
+        })
 
     result = {
         "message": "Weights saved successfully",
@@ -489,7 +522,18 @@ async def save_weights_for_sampler(
     """Save weights in a format compatible with sampling/inference servers."""
     verify_api_key(x_api_key)
 
-    path = request.path or f"tinker://{request.model_id}/sampler_checkpoint_{int(time.time())}"
+    checkpoint_name = request.path or f"sampler_checkpoint_{int(time.time())}"
+    path = f"tinker://{request.model_id}/sampler_weights/{checkpoint_name}"
+
+    # Store checkpoint metadata
+    if request.model_id in checkpoints_store:
+        checkpoint_id = f"sampler_weights/{checkpoint_name}"
+        checkpoints_store[request.model_id].append({
+            "checkpoint_id": checkpoint_id,
+            "checkpoint_type": "sampler",
+            "time": datetime.now().isoformat() + "Z",
+            "tinker_path": path,
+        })
 
     result = {
         "message": "Sampler weights saved successfully",
@@ -507,17 +551,10 @@ async def list_checkpoints(
     """List available model checkpoints."""
     verify_api_key(x_api_key)
 
-    return {
-        "checkpoints": [
-            {
-                "checkpoint_id": f"ckpt_{i}",
-                "path": f"tinker://{model_id}/checkpoint_{i}",
-                "created_at": time.time() - (i * 3600),
-                "type": "training" if i % 2 == 0 else "sampler",
-            }
-            for i in range(5)
-        ]
-    }
+    if model_id not in checkpoints_store:
+        return {"checkpoints": []}
+
+    return {"checkpoints": checkpoints_store[model_id]}
 
 
 @app.delete("/api/v1/training_runs/{model_id}/checkpoints/{checkpoint_id}")
@@ -529,7 +566,84 @@ async def delete_checkpoint(
     """Delete a checkpoint for the given training run."""
     verify_api_key(x_api_key)
 
+    # Remove from checkpoints_store
+    if model_id in checkpoints_store:
+        checkpoints_store[model_id] = [
+            ckpt for ckpt in checkpoints_store[model_id]
+            if ckpt["checkpoint_id"] != checkpoint_id
+        ]
+
     return {"message": f"Checkpoint {checkpoint_id} deleted successfully"}
+
+
+# ============================================================================
+# REST API Endpoints (Training Runs)
+# ============================================================================
+
+@app.get("/api/v1/training_runs/{training_run_id}")
+async def get_training_run(
+    training_run_id: str,
+    x_api_key: str = Header(None)
+):
+    """Get training run metadata by ID. Critical for create_training_client_from_state()."""
+    verify_api_key(x_api_key)
+
+    if training_run_id not in training_runs_store:
+        raise HTTPException(status_code=404, detail=f"Training run {training_run_id} not found")
+
+    return training_runs_store[training_run_id]
+
+
+@app.get("/api/v1/training_runs")
+async def list_training_runs(
+    limit: int = 20,
+    offset: int = 0,
+    x_api_key: str = Header(None)
+):
+    """List all training runs with pagination support."""
+    verify_api_key(x_api_key)
+
+    all_runs = list(training_runs_store.values())
+    total_count = len(all_runs)
+    paginated_runs = all_runs[offset:offset + limit]
+
+    return {
+        "training_runs": paginated_runs,
+        "cursor": {
+            "offset": offset,
+            "limit": limit,
+            "total_count": total_count
+        }
+    }
+
+
+@app.get("/api/v1/training_runs/{training_run_id}/checkpoints/{checkpoint_id:path}/archive")
+async def download_checkpoint_archive(
+    training_run_id: str,
+    checkpoint_id: str,
+    x_api_key: str = Header(None)
+):
+    """Download checkpoint as tar.gz archive. Returns mock empty archive."""
+    verify_api_key(x_api_key)
+
+    if training_run_id not in training_runs_store:
+        raise HTTPException(status_code=404, detail=f"Training run {training_run_id} not found")
+
+    # Create a mock empty tar.gz archive
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode='w:gz') as tar:
+        # Add a mock metadata file
+        info = tarfile.TarInfo(name="metadata.json")
+        metadata = f'{{"checkpoint_id": "{checkpoint_id}", "training_run_id": "{training_run_id}"}}'.encode()
+        info.size = len(metadata)
+        tar.addfile(info, io.BytesIO(metadata))
+
+    tar_buffer.seek(0)
+    return Response(
+        content=tar_buffer.read(),
+        media_type="application/gzip",
+        headers={"Content-Disposition": f"attachment; filename={checkpoint_id.replace('/', '_')}.tar.gz"}
+    )
 
 
 # ============================================================================
