@@ -59,7 +59,8 @@ while time.time() - start < max_wait:
         time.sleep(5)
         continue
 
-    if result.get("type") == "create_model":
+    # Check if model creation is complete
+    if "model_id" in result and result.get("status") == "ready":
         print(f"✓ Model created successfully!")
         print(f"  Model ID: {result['model_id']}")
         model_id = result["model_id"]
@@ -82,7 +83,7 @@ response = requests.post(
     headers=headers,
     json={
         "model_id": model_id,
-        "prompt": {"input_ids": [1, 2, 3, 4]},
+        "prompt": {"tokens": [1, 2, 3, 4]},  # API expects "tokens" not "input_ids"
         "num_samples": 2,
         "sampling_params": {
             "max_tokens": 20,

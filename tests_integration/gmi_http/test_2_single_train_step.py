@@ -50,7 +50,8 @@ try:
         f"{GMI_URL}/api/v1/create_model",
         json={
             "base_model": "/data/models/Qwen2.5-0.5B-Instruct_torch_dist",
-            "lora_config": {"rank": 0, "alpha": 0}
+            "lora_config": {"rank": 0, "alpha": 0},
+            "debug_train_only": True  # Skip update_weights() for supervised-only training
         },
         headers=headers,
         timeout=30.0
