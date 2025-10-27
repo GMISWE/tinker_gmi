@@ -47,7 +47,7 @@ try:
 
     # Step 3: Create initial sampling client
     print("\n[3/7] Creating sampling client for rollouts...")
-    sampling_client = training_client.save_weights_and_get_sampling_client_async(
+    sampling_client = training_client.save_weights_and_get_sampling_client(
         name="rl_iteration_0"
     )
     print("   ✓ Sampling client created")
@@ -60,7 +60,7 @@ try:
     print("\n[4/7] Generating rollouts...")
 
     prompt_tokens = [1, 2, 3, 4, 5]
-    prompt = types.TokenSequence(tokens=prompt_tokens)
+    prompt = types.ModelInput.from_ints(prompt_tokens)
 
     sampling_params = types.SamplingParams(
         max_tokens=20,
@@ -71,13 +71,14 @@ try:
     print(f"   Prompt: {prompt_tokens}")
     print(f"   Num samples: 2")
 
-    sample_future = sampling_client.asample_async(
+    sample_future = sampling_client.sample(
         prompt=prompt,
         num_samples=2,
         sampling_params=sampling_params
     )
 
-    samples = sample_future.result()
+    sample_response = sample_future.result()
+    samples = sample_response.sequences
     print(f"   ✓ Generated {len(samples)} rollout samples")
 
     for i, sample in enumerate(samples):
@@ -102,14 +103,30 @@ try:
         sample_tokens = sample.tokens[:10]  # Limit length for test
 
         datum = tinker.Datum(
-            model_input=types.TokenSequence(tokens=sample_tokens),
+            model_input=types.ModelInput.from_ints(sample_tokens),
             loss_fn_inputs={
-                "target": types.TokenSequence(tokens=sample_tokens[1:] + [sample_tokens[-1]]),
-                "weights": types.Vector(data=[1.0] * len(sample_tokens)),
-                "advantages": types.Vector(data=[advantage] * len(sample_tokens)),
+                "target": types.TensorData(
+                    data=sample_tokens[1:] + [sample_tokens[-1]],
+                    shape=[len(sample_tokens)],
+                    dtype="int64"
+                ),
+                "weights": types.TensorData(
+                    data=[1.0] * len(sample_tokens),
+                    shape=[len(sample_tokens)],
+                    dtype="float32"
+                ),
+                "advantages": types.TensorData(
+                    data=[advantage] * len(sample_tokens),
+                    shape=[len(sample_tokens)],
+                    dtype="float32"
+                ),
                 # For importance sampling, we also need log_probs from sampling
                 # In real RL, these come from the rollout
-                "log_probs": types.Vector(data=[0.0] * len(sample_tokens))  # Mock values
+                "log_probs": types.TensorData(
+                    data=[0.0] * len(sample_tokens),
+                    shape=[len(sample_tokens)],
+                    dtype="float32"
+                )  # Mock values
             }
         )
         training_data.append(datum)
@@ -152,7 +169,7 @@ try:
 
     # Step 7: Update sampling client for next iteration
     print("\n[7/7] Updating sampling client for next iteration...")
-    new_sampling_client = training_client.save_weights_and_get_sampling_client_async(
+    new_sampling_client = training_client.save_weights_and_get_sampling_client(
         name="rl_iteration_1"
     )
     print("   ✓ New sampling client created")

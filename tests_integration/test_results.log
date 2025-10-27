@@ -175,3 +175,104 @@ This matches Megatron's design where checkpoint loading is part of initializatio
 
 🎉 Checkpoint resume workflow is now fully functional!
 
+
+
+=== SESSION SUMMARY - 2025-10-27 ===
+
+✅ MAJOR SUCCESS: Checkpoint Resume Implementation
+
+Root Cause Fixed:
+  - load_weights endpoint was calling non-existent actor.load_model.remote()
+  - Slime/Megatron loads checkpoints during actor initialization, not as separate operation
+  
+Solution Implemented:
+  - Pass checkpoint_path during create_model
+  - Set args.load before actor initialization
+  - Actors automatically load checkpoint during init via load_checkpoint()
+
+Code Changes:
+  1. kgateway/python/ai_extension/training/api.py:
+     - Added checkpoint_path parameter throughout call chain
+     - Implemented checkpoint URI parsing and step_id calculation
+     - Deprecated load_weights endpoint (returns 501)
+     - Fixed filesystem_checkpoint_path variable bug
+  
+  2. tinker_gmi/src/tinker/lib/public_interfaces/service_client.py:
+     - Added checkpoint_path to _create_model_submit()
+     - Updated create_lora_training_client() and async variant
+     - Modified create_training_client_from_state() to use checkpoint_path
+     - Removed load_state() calls
+
+Test Result: ✅ test_checkpoint_resume.py - PASSED
+  - Full workflow verified: train → save → delete → resume → train
+
+
+🔄 IN PROGRESS: RL Rollout Pattern Test  
+
+Status: Test file corrected (TokenSequence→ModelInput, added .result() calls)
+Issue: retrieve_future returning 500 errors, blocking model creation completion
+  - Ray actors created successfully (4 MegatronTrainRayActor + 1 RolloutManager + 4 SGLangEngine)
+  - Infrastructure working, but future retrieval mechanism needs investigation
+
+Next Steps:
+  - Debug async task completion in create_model
+  - Investigate future storage/retrieval mechanism
+  - Test RL workflow end-to-end once model creation completes
+
+
+
+=== RL ROLLOUT PATTERN TEST - PASSING ===
+Date: 2025-10-27
+
+✅ ROOT CAUSE FIXED: Sync API usage in non-async test context
+
+Problems encountered and fixes:
+1. Used save_weights_and_get_sampling_client_async() instead of sync version
+   Fix: Changed to save_weights_and_get_sampling_client()
+
+2. Used asample_async() instead of sync version  
+   Fix: Changed to sample().result()
+   
+3. Accessed sample_response.samples instead of sequences
+   Fix: Changed to sample_response.sequences
+
+Test Results: ✅ test_rl_rollout_pattern.py - PASSED
+  - Training client: Created successfully (no LoRA)
+  - Sampling client: Created from training weights
+  - Rollouts generated: 2 sequences (20 tokens each)
+  - Training data: 2 datums with mock advantages [1.0, -0.5]
+  - Forward-backward: importance_sampling loss function
+  - Metrics: pg_loss=0.032355, entropy_loss=11.931214
+  - Optimizer step: Completed successfully
+  - Updated sampling client: Ready for next RL iteration
+
+Architecture validated:
+  1. Training client + RolloutManager colocated on same GPUs
+  2. SGLangEngine actors for sampling (4 engines)
+  3. Importance sampling loss for RL training
+  4. Weight synchronization via save_weights_and_get_sampling_client()
+
+🎉 Complete RL workflow functional: train → rollout → train!
+
+
+=== CLEANUP WORKFLOW IMPROVEMENT ===
+Date: 2025-10-27
+
+✅ NEW: cleanup_futures endpoint and cleanup script
+
+Instead of restarting kgateway between tests, we now use:
+1. delete_model() - Cleanup Ray actors and placement groups (frees GPU)
+2. cleanup_futures() - Clear old futures from database (removes stale state)
+
+Benefits:
+  - Faster (no pod restart needed)
+  - More realistic (tests actual user cleanup workflow)
+  - Better resource management validation
+
+New files:
+  - kgateway/python/ai_extension/training/api.py: Added cleanup_futures endpoint
+  - tinker_gmi/tests_integration/cleanup_test_env.py: Cleanup helper script
+
+Usage: python cleanup_test_env.py (before running tests)
+
+
