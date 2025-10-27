@@ -1,1 +1,119 @@
 Phase 2 Test: test_supervised_single_step.py - PASSED
+Phase 2 Test: test_sampling_client_creation.py - PASSED
+Phase 2 Test: test_supervised_single_step.py - PASSED
+Phase 2 Test: test_sampling_client_creation.py - PASSED
+Phase 3 Test: test_supervised_multi_epoch.py - PASSED
+
+
+Phase 3 Test: test_checkpoint_resume.py - BLOCKED
+  - Reason: Checkpoint loading not yet implemented in create_model
+  - Progress: Successfully implemented:
+    * /api/v1/training_runs/{model_id} endpoint
+    * tinker:// URI format (tinker://<model_id>/weights/<checkpoint_id>)
+    * save_weights returns correct URI format
+  - Next steps: Need to implement checkpoint loading in create_model endpoint
+    to support resuming from saved checkpoints
+
+
+Phase 3 Test: test_checkpoint_resume.py - BLOCKED
+  - Cleanup successful: GPU resources released ✓
+  - Problem: After delete_model, training run metadata is lost
+  - Error: "Training run model_xxx not found" when calling create_training_client_from_state
+  - Root cause: training_clients dict is only active model store, not persistent metadata
+  - Solution needed: Separate metadata persistence from active client tracking
+  - Next step: Implement training_runs_metadata dict for persistent storage
+
+
+Phase 3 Test: test_checkpoint_resume.py - PARTIAL SUCCESS
+  √ Problem 1 SOLVED: GPU resource cleanup working
+    - delete_model endpoint successfully kills actors and placement group
+    - GPU resources released, allowing second training client to allocate
+  
+  √ Problem 2 SOLVED: Training run metadata persistence
+    - Implemented training_runs_metadata dict (persistent)
+    - Separated from training_clients dict (ephemeral)
+    - GET /api/v1/training_runs/{model_id} now works after client deletion
+    - create_training_client_from_state() successfully creates second client
+  
+  ⏳ Problem 3 IN PROGRESS: load_weights operation
+    - Second training client created successfully (4 actors allocated)
+    - load_weights request submitted
+    - Operation appears to be hanging/timing out
+    - Next: Debug why load_model.remote() is not completing
+  
+  Status: Core persistence mechanism working! Just need to fix load operation.
+
+
+=== DELETE VERIFICATION TEST - COMPLETED ===
+Date: 2025-10-27
+
+✅ VERIFIED: delete_model functionality
+  Baseline: 0 actors
+  After create_model: 4 MegatronTrainRayActor actors created
+  After delete_model: 0 actors (all killed successfully)
+  
+✅ VERIFIED: Training run metadata persistence
+  After delete_model: GET /api/v1/training_runs/{id} returns 200
+  Metadata preserved: training_run_id, base_model, lora_rank, etc.
+  
+✅ VERIFIED: Actor IDs change
+  First client actors: 17e34044..., 2fdc0474..., 5ae6fb75..., b14f4e72...
+  After delete: "No resource in the cluster"
+  
+CONCLUSION: Core persistence mechanism is WORKING CORRECTLY!
+  - Ray actors are properly killed and GPU resources freed
+  - Training run metadata survives client deletion
+  - System ready for checkpoint resume implementation
+
+Next test: Full checkpoint resume with verified cleanup between clients
+
+
+=== NEW TEST ADDED ===
+File: tests_integration/gmi_http/test_5_delete_model_verification.py
+Purpose: Verify delete_model endpoint properly cleans up Ray actors and persists metadata
+Location: Phase 1 (gmi_http) - Direct HTTP API tests
+
+Test validates:
+  ✓ Ray actors are killed after delete_model call
+  ✓ GPU resources are freed (actor count goes to 0)
+  ✓ Training run metadata persists after deletion
+  ✓ GET /api/v1/training_runs/{id} works post-deletion
+
+Status: ✅ PASSING (verified with 0→4→0 actor count progression)
+
+This test is critical for checkpoint resume workflow, proving the resource
+cleanup mechanism works correctly before testing the full resume flow.
+
+
+=== CHECKPOINT RESUME TEST - DEBUG SESSION ===
+Date: 2025-10-27
+
+Test Status: PARTIALLY WORKING, load_weights operation hangs
+
+✅ WORKING Components:
+  1. Training client creation (4 actors allocated)
+  2. Training execution (forward_backward + optim_step)
+  3. Checkpoint save (save_state creates checkpoint)
+  4. Training client deletion (actors killed, GPU freed)
+  5. Training run metadata persistence (survives deletion)
+  6. Second client creation from checkpoint (4 new actors created)
+  
+❌ HANGING Component:
+  7. Checkpoint loading operation (load_weights hangs)
+  
+Analysis:
+  - Test reaches step [4/6]: Creating training client from checkpoint
+  - Second training client IS created (verified: 4 MegatronTrainRayActor actors exist)
+  - load_state() operation calls /api/v1/load_weights
+  - load_weights endpoint calls actor.load_model.remote(step_id)
+  - Ray operation hangs (no completion, no error logs)
+  - retrieve_future returns 500 errors (operation not completing)
+
+Root Cause: Slime's load_model operation is hanging or taking extremely long
+  Possible reasons:
+    1. Checkpoint file path mismatch (wrong step_id calculation?)
+    2. Slime load_model is blocking or has an internal error
+    3. Load operation needs different parameters
+
+Next Steps: Debug Slime's load_model directly in slime-training pod
+

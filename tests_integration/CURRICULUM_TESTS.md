@@ -77,6 +77,20 @@ tinker_gmi/tests_integration/
   - Loss progression tracking
   - Multiple forward-backward + optim cycles
 
+#### ✅ test_5_delete_model_verification.py
+- **Difficulty:** Medium
+- **Validates:** Resource cleanup and metadata persistence
+- **Key Concepts:**
+  - `/api/v1/delete_model` endpoint
+  - Ray actor cleanup verification
+  - GPU resource management
+  - Training run metadata persistence after deletion
+  - Critical for checkpoint resume workflow
+- **Verification:**
+  - Counts Ray actors before/after delete
+  - Confirms metadata survives client deletion
+  - Proves GPU resources are freed
+
 ---
 
 ### Phase 2: Tinker Client Basics (e2e_tinker_api)

@@ -37,7 +37,8 @@ try:
     client = tinker.ServiceClient()
     training_client_1 = client.create_lora_training_client(
         base_model="/data/models/Qwen2.5-0.5B-Instruct_torch_dist",
-        rank=0  # No LoRA
+        rank=0,  # No LoRA
+        debug_train_only=True  # Skip update_weights() for supervised-only training
     )
     print(f"   ✓ Training client 1 created: {training_client_1.model_id}")
 
@@ -49,10 +50,18 @@ try:
 
     for step in range(3):
         datum = tinker.Datum(
-            model_input=types.TokenSequence(tokens=input_tokens),
+            model_input=types.ModelInput.from_ints(input_tokens),
             loss_fn_inputs={
-                "target": types.TokenSequence(tokens=input_tokens[1:] + [input_tokens[-1]]),
-                "weights": types.Vector(data=[1.0] * len(input_tokens))
+                "target": types.TensorData(
+                    data=input_tokens[1:] + [input_tokens[-1]],
+                    shape=[len(input_tokens)],
+                    dtype="int64"
+                ),
+                "weights": types.TensorData(
+                    data=[1.0] * len(input_tokens),
+                    shape=[len(input_tokens)],
+                    dtype="float32"
+                )
             }
         )
 
@@ -97,6 +106,26 @@ try:
     print(f"     Name: {checkpoint_name}")
     print(f"     Path: {checkpoint_path}")
 
+    # Step 3.5: Cleanup first training client to release GPU resources
+    print("\n[3.5/6] Cleaning up first training client to release GPU resources...")
+    print(f"   Deleting model: {training_client_1.model_id}")
+
+    import httpx
+    cleanup_url = f"{os.environ.get('TINKER_BASE_URL')}/api/v1/delete_model"
+    cleanup_response = httpx.post(
+        cleanup_url,
+        json={"model_id": training_client_1.model_id},
+        headers={"x-api-key": os.environ.get('TINKER_API_KEY')},
+        timeout=30.0
+    )
+
+    if cleanup_response.status_code == 200:
+        print(f"   ✓ First training client cleaned up successfully")
+        print(f"     GPU resources released for checkpoint resume")
+    else:
+        print(f"   ⚠ Cleanup returned status {cleanup_response.status_code}")
+        print(f"     Response: {cleanup_response.text}")
+
     # Step 4: Create new training client from checkpoint
     print("\n[4/6] Creating training client from checkpoint...")
     print(f"   Loading from: {checkpoint_path}")
@@ -111,10 +140,18 @@ try:
 
     for step in range(3):
         datum = tinker.Datum(
-            model_input=types.TokenSequence(tokens=input_tokens),
+            model_input=types.ModelInput.from_ints(input_tokens),
             loss_fn_inputs={
-                "target": types.TokenSequence(tokens=input_tokens[1:] + [input_tokens[-1]]),
-                "weights": types.Vector(data=[1.0] * len(input_tokens))
+                "target": types.TensorData(
+                    data=input_tokens[1:] + [input_tokens[-1]],
+                    shape=[len(input_tokens)],
+                    dtype="int64"
+                ),
+                "weights": types.TensorData(
+                    data=[1.0] * len(input_tokens),
+                    shape=[len(input_tokens)],
+                    dtype="float32"
+                )
             }
         )
 
