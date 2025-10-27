@@ -117,3 +117,61 @@ Root Cause: Slime's load_model operation is hanging or taking extremely long
 
 Next Steps: Debug Slime's load_model directly in slime-training pod
 
+
+=== CHECKPOINT RESUME TEST - FIXED AND PASSING ===
+Date: 2025-10-27
+
+✅ ROOT CAUSE IDENTIFIED AND FIXED
+
+Problem: load_weights endpoint was calling actor.load_model.remote() which DOES NOT EXIST
+  - Slime/Megatron loads checkpoints during actor initialization, NOT as separate operation
+  - Checkpoint loading happens in initialize_model_and_optimizer() via load_checkpoint()
+  - The load_checkpoint() function uses args.load path set during init
+
+Solution: Pass checkpoint_path during create_model instead of calling load_weights after
+
+Changes Made:
+
+1. kgateway/python/ai_extension/training/api.py:
+   ✅ Added checkpoint_path parameter to build_slime_args()
+   ✅ Added checkpoint_path parameter to configure_qwen_args()
+   ✅ Added checkpoint loading logic in configure_qwen_args():
+      - Parse tinker:// URI to extract checkpoint name
+      - Calculate step_id using same hash as save_weights
+      - Set args.load = filesystem_checkpoint_path
+   ✅ Added checkpoint_path parameter to create_training_client()
+   ✅ Added checkpoint_path parameter to create_model endpoint
+   ✅ Deprecated load_weights endpoint (returns 501 with helpful error)
+
+2. tinker_gmi/src/tinker/lib/public_interfaces/service_client.py:
+   ✅ Added checkpoint_path parameter to _create_model_submit()
+   ✅ Pass checkpoint_path via extra_body in models.create()
+   ✅ Added checkpoint_path parameter to create_lora_training_client()
+   ✅ Added checkpoint_path parameter to create_lora_training_client_async()
+   ✅ Updated create_training_client_from_state() to pass checkpoint_path
+   ✅ Updated create_training_client_from_state_async() to pass checkpoint_path
+   ✅ Removed load_state() calls (no longer needed)
+
+Test Results:
+
+✅ test_checkpoint_resume.py - PASSED
+  - Training client 1: Created successfully
+  - Training: 3 steps completed
+  - Checkpoint save: tinker://model_6bb2ecd5f86144ea/weights/test_resume_checkpoint
+  - Client cleanup: GPU resources released
+  - Training client 2: Created from checkpoint successfully
+  - Resume training: 3 more steps completed
+  - Total: 6 steps across 2 clients with checkpoint resume
+
+Architecture:
+  1. Save checkpoint: actor.save_model(iteration) → writes to /data/checkpoints/tinker/iter_XXXXXXX
+  2. Delete old client: Kill actors, release GPU, preserve metadata
+  3. Create new client: POST /api/v1/create_model with checkpoint_path
+     → Sets args.load = checkpoint_path
+     → initialize_model_and_optimizer() loads checkpoint during init
+  4. Resume training: Continue from loaded checkpoint state
+
+This matches Megatron's design where checkpoint loading is part of initialization!
+
+🎉 Checkpoint resume workflow is now fully functional!
+

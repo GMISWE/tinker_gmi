@@ -78,15 +78,18 @@ class ServiceClient(TelemetryProvider):
         return await self._get_server_capabilities_submit()
 
     def _create_model_submit(
-        self, base_model: str, lora_config: types.LoraConfig, debug_train_only: bool = False
+        self, base_model: str, lora_config: types.LoraConfig, debug_train_only: bool = False, checkpoint_path: str | None = None
     ) -> AwaitableConcurrentFuture[types.ModelID]:
         async def _create_model_async():
             start_time = time.time()
             with self.holder.aclient(ClientConnectionPoolType.TRAIN) as client:
+                extra_body = {"debug_train_only": debug_train_only}
+                if checkpoint_path:
+                    extra_body["checkpoint_path"] = checkpoint_path
                 future = await client.models.create(
                     base_model=base_model,
                     lora_config=_to_lora_config_params(lora_config),
-                    extra_body={"debug_train_only": debug_train_only}
+                    extra_body=extra_body
                 )
             create_model_response = await _APIFuture(
                 types.CreateModelResponse,
@@ -110,6 +113,7 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
     ) -> TrainingClient:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -124,6 +128,7 @@ class ServiceClient(TelemetryProvider):
                 train_unembed=train_unembed,
             ),
             debug_train_only=debug_train_only,
+            checkpoint_path=checkpoint_path,
         ).result()
         logger.info(f"Creating TrainingClient for {model_id=}")
         return self.create_training_client(model_id)
@@ -138,6 +143,7 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
     ) -> TrainingClient:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -152,6 +158,7 @@ class ServiceClient(TelemetryProvider):
                 train_unembed=train_unembed,
             ),
             debug_train_only=debug_train_only,
+            checkpoint_path=checkpoint_path,
         )
         logger.info(f"Creating TrainingClient for {model_id=}")
         return self.create_training_client(model_id)
@@ -168,12 +175,15 @@ class ServiceClient(TelemetryProvider):
         rest_client = self.create_rest_client()
         training_run = rest_client.get_training_run_by_tinker_path(path).result()
 
+        # Create training client with checkpoint_path to load during initialization
+        # NOTE: Slime/Megatron loads checkpoints during actor init, not as separate operation
         training_client = self.create_lora_training_client(
             base_model=training_run.base_model,
             rank=training_run.lora_rank,
+            checkpoint_path=path,
         )
 
-        training_client.load_state(path).result()
+        # No need to call load_state() - checkpoint is loaded during create_model
         return training_client
 
     @capture_exceptions(fatal=True)
@@ -184,13 +194,15 @@ class ServiceClient(TelemetryProvider):
         # Right now all training runs are LoRa runs.
         assert training_run.is_lora and training_run.lora_rank is not None
 
+        # Create training client with checkpoint_path to load during initialization
+        # NOTE: Slime/Megatron loads checkpoints during actor init, not as separate operation
         training_client = await self.create_lora_training_client_async(
             base_model=training_run.base_model,
             rank=training_run.lora_rank,
+            checkpoint_path=path,
         )
 
-        load_future = await training_client.load_state_async(path)
-        await load_future.result_async()
+        # No need to call load_state() - checkpoint is loaded during create_model
         return training_client
 
     @capture_exceptions(fatal=True)
