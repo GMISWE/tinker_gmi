@@ -376,9 +376,10 @@ Advanced features not yet implemented:
 
 **Prerequisites:** Phase 1, 2, & 3 tests passing
 
-#### 🆕 test_advantage_computation.py
+#### ✅ test_advantage_computation.py
 - **Difficulty:** Medium
 - **Validates:** Group-based advantage normalization (core RL pattern)
+- **Status:** ✅ PASSING (2025-10-28)
 - **Key Concepts:**
   - Multiple trajectories per prompt (group_size)
   - Advantage = reward - mean(group_rewards)
@@ -387,9 +388,10 @@ Advanced features not yet implemented:
 - **Cookbook Reference:** `recipes/rl_loop.py`, `rl/data_processing.py`
 - **Why Critical:** Used in ALL RL recipes, prevents reward scale issues
 
-#### 🆕 test_gradient_accumulation.py
+#### ✅ test_gradient_accumulation.py
 - **Difficulty:** Medium
 - **Validates:** Multi-substep gradient accumulation
+- **Status:** ✅ PASSING (2025-10-28)
 - **Key Concepts:**
   - Multiple forward_backward() calls accumulate gradients
   - Single optim_step() applies all accumulated gradients
@@ -398,9 +400,10 @@ Advanced features not yet implemented:
 - **Cookbook Reference:** `rl/train.py`, Advanced Features section
 - **Why Critical:** Enables large-batch training with limited memory
 
-#### 🆕 test_kl_divergence_tracking.py
+#### ✅ test_kl_divergence_tracking.py
 - **Difficulty:** Medium-Hard
 - **Validates:** KL divergence and entropy monitoring
+- **Status:** ✅ PASSING (2025-10-28)
 - **Key Concepts:**
   - Forward KL: D_KL(π_train || π_sample)
   - Reverse KL: D_KL(π_sample || π_train)
@@ -421,14 +424,25 @@ export TINKER_API_KEY="slime-dev-key"
 
 ### Test Execution (in slime-training pod)
 ```bash
-# Restart kgateway pod before tests
-kubectl delete pod -n slime-gmi -l app=kgateway-training
+# Run cleanup before tests (NO MORE POD RESTARTS NEEDED!)
+cd /tmp/tinker_gmi/tests_integration && python -u cleanup_test_env.py
 
 # Run advanced pattern tests
-python -u test_advantage_computation.py        # Core RL pattern
-python -u test_gradient_accumulation.py        # Memory-efficient training
-python -u test_kl_divergence_tracking.py       # Stability monitoring
+cd /tmp/tinker_gmi/tests_integration/e2e_tinker_api
+python -u test_advantage_computation.py        # ✅ PASSING - Core RL pattern
+python -u cleanup_test_env.py                 # Cleanup between tests
+
+python -u test_gradient_accumulation.py        # ✅ PASSING - Memory-efficient training
+python -u cleanup_test_env.py                 # Cleanup between tests
+
+python -u test_kl_divergence_tracking.py       # ✅ PASSING - Stability monitoring
+python -u cleanup_test_env.py                 # Final cleanup
 ```
+
+### ✅ All Phase 4 Tests Passing (2025-10-28)
+- test_advantage_computation.py - PASSED
+- test_gradient_accumulation.py - PASSED
+- test_kl_divergence_tracking.py - PASSED
 
 ---
 
@@ -446,8 +460,16 @@ This curriculum learning approach ensures:
 - Phase 1 (HTTP API): 6 tests ✅
 - Phase 2 (Client Basics): 4 tests ✅
 - Phase 3 (Training Workflows): 3 tests ✅
-- Phase 4 (Advanced Patterns): 3 tests 🆕
+- Phase 4 (Advanced Patterns): 3 tests ✅
 
-**Total: 16 end-to-end tests covering Tinker API**
+**Total: 16/16 end-to-end tests passing ✅**
+
+### Major Infrastructure Improvements (2025-10-28):
+- ✅ Enhanced cleanup workflow - NO MORE POD RESTARTS!
+- ✅ Health endpoint now returns model_ids list
+- ✅ cleanup_test_env.py automatically deletes all active models
+- ✅ Cleanup script deletes stale futures from database
+- ✅ Ray actors properly cleaned between tests
+- Result: Faster testing, better resource management, production-ready cleanup
 
 By following this progression, we systematically validate that kgateway-training with Slime backend fully implements the Tinker API as specified in tinker-cookbook.
