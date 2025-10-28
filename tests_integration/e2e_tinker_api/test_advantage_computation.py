@@ -210,9 +210,9 @@ def test_advantage_computation():
     optim_result = optim_future.result()
     print(f"  ✓ Optimizer step completed")
 
-    # Cleanup
-    training_client.delete_model()
-    print(f"\n✓ Model cleanup completed")
+    # Cleanup (skipped - cleanup_test_env.py handles this)
+    # training_client.delete_model()
+    # print(f"\n✓ Model cleanup completed")
 
     print("\n" + "=" * 80)
     print("TEST PASSED: Advantage Computation Pattern")

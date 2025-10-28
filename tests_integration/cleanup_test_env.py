@@ -26,7 +26,7 @@ print("=" * 80)
 print(f"Base URL: {base_url}")
 print("=" * 80)
 
-# Step 1: Get list of active models
+# Step 1: Get list of active models and delete them
 print("\n[1/3] Checking for active models...")
 try:
     response = requests.get(
@@ -34,21 +34,40 @@ try:
         headers={"X-API-Key": api_key},
         timeout=5
     )
-    
+
     if response.status_code == 200:
         health = response.json()
-        active_models = health.get("active_training_clients", 0)
+        model_ids = health.get("model_ids", [])
+        active_models = len(model_ids)
         print(f"   Active training clients: {active_models}")
-        
+
         if active_models == 0:
             print("   ✓ No active models to cleanup")
         else:
             print(f"   ⚠ Warning: {active_models} active models found")
-            print("   Note: delete_model requires model_id, which is not available from health endpoint")
-            print("   Recommendation: Tests should cleanup their own models with delete_model()")
+            print(f"   Model IDs: {model_ids}")
+
+            # Delete each model
+            for model_id in model_ids:
+                print(f"   Deleting model: {model_id}...")
+                try:
+                    del_response = requests.post(
+                        f"{base_url}/api/v1/delete_model",
+                        json={"model_id": model_id},
+                        headers={"X-API-Key": api_key},
+                        timeout=30
+                    )
+
+                    if del_response.status_code == 200:
+                        print(f"   ✓ Deleted model: {model_id}")
+                    else:
+                        print(f"   ✗ Failed to delete {model_id}: {del_response.status_code}")
+
+                except Exception as e:
+                    print(f"   ✗ Error deleting {model_id}: {e}")
     else:
         print(f"   ✗ Health check failed: {response.status_code}")
-        
+
 except Exception as e:
     print(f"   ✗ Failed to check health: {e}")
 

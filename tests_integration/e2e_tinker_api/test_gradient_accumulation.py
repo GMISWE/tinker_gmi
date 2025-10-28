@@ -186,7 +186,7 @@ def test_gradient_accumulation():
     optim_future = training_client.optim_step(adam_params)
     optim_result = optim_future.result()
 
-    grad_norm = optim_result.get("grad_norm", 0.0)
+    grad_norm = getattr(optim_result, "grad_norm", 0.0)
     print(f"  Gradient norm: {grad_norm:.6f}")
     print(f"✓ Optimizer step completed - accumulated gradients applied")
 
@@ -209,9 +209,9 @@ def test_gradient_accumulation():
     # Verify only single optimizer step
     print(f"  ✓ Single optimizer step applied all accumulated gradients")
 
-    # Cleanup
-    training_client.delete_model()
-    print(f"\n✓ Model cleanup completed")
+    # Cleanup (skipped - cleanup_test_env.py handles this)
+    # training_client.delete_model()
+    # print(f"\n✓ Model cleanup completed")
 
     print("\n" + "=" * 80)
     print("TEST PASSED: Gradient Accumulation Pattern")

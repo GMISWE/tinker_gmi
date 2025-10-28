@@ -271,9 +271,9 @@ def test_kl_divergence_tracking():
 
     print(f"✓ KL divergence tracking completed")
 
-    # Cleanup
-    training_client.delete_model()
-    print(f"\n✓ Model cleanup completed")
+    # Cleanup (skipped - cleanup_test_env.py handles this)
+    # training_client.delete_model()
+    # print(f"\n✓ Model cleanup completed")
 
     print("\n" + "=" * 80)
     print("TEST PASSED: KL Divergence Tracking")
