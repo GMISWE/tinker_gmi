@@ -171,11 +171,20 @@ def test_kl_divergence_tracking():
         datum = tinker.Datum(
             model_input=tinker.ModelInput.from_ints(full_tokens),
             loss_fn_inputs={
-                "target_tokens": types.TensorData.from_list(trajectory.tokens, dtype="int"),
-                "logprobs": types.TensorData.from_list(trajectory.logprobs, dtype="float"),
-                "advantages": types.TensorData.from_list(
-                    [advantage] * len(trajectory.tokens),
-                    dtype="float"
+                "target_tokens": types.TensorData(
+                    data=trajectory.tokens,
+                    shape=[len(trajectory.tokens)],
+                    dtype="int64"
+                ),
+                "logprobs": types.TensorData(
+                    data=trajectory.logprobs,
+                    shape=[len(trajectory.logprobs)],
+                    dtype="float32"
+                ),
+                "advantages": types.TensorData(
+                    data=[advantage] * len(trajectory.tokens),
+                    shape=[len(trajectory.tokens)],
+                    dtype="float32"
                 ),
             }
         )

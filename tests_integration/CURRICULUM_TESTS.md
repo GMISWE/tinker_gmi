@@ -199,11 +199,11 @@ export TINKER_API_KEY="slime-dev-key"
 kubectl delete pod -n slime-gmi -l app=kgateway-training
 
 # Run tests
-python -u /test-scripts/test_1_model_creation.py          # ✅ Should pass
-python -u /test-scripts/test_2_single_train_step.py       # ✅ Should pass
-python -u /test-scripts/test_direct_http_sampling.py      # ✅ Should pass
-python -u /test-scripts/test_3_checkpoint_workflow.py     # 🆕 New test
-python -u /test-scripts/test_4_multi_step_training.py     # 🆕 New test
+python -u test_1_model_creation.py          # ✅ Should pass
+python -u test_2_single_train_step.py       # ✅ Should pass
+python -u test_direct_http_sampling.py      # ✅ Should pass
+python -u test_3_checkpoint_workflow.py     # Should pass
+python -u test_4_multi_step_training.py     # Should pass
 ```
 
 #### Phase 2: Tinker Client Basics

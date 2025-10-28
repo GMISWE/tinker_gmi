@@ -124,7 +124,11 @@ def test_gradient_accumulation():
         datum = tinker.Datum(
             model_input=tinker.ModelInput.from_ints(full_tokens),
             loss_fn_inputs={
-                "weights": types.TensorData.from_list(weights, dtype="float"),
+                "weights": types.TensorData(
+                    data=weights,
+                    shape=[len(weights)],
+                    dtype="float32"
+                ),
             }
         )
         training_datums.append(datum)
