@@ -86,7 +86,7 @@ def test_advantage_computation():
     training_client = service_client.create_lora_training_client(
         base_model=BASE_MODEL,
         rank=0,  # No LoRA for simplicity
-        debug_train_only=True,  # Skip update_weights() to avoid SGLang cache flush
+        debug_train_only=False,  # Enable SGLang for sampling
     )
     print(f"✓ Training client created: {training_client.model_id}")
 
