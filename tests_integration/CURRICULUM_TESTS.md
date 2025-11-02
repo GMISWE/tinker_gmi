@@ -446,6 +446,94 @@ python -u cleanup_test_env.py                 # Final cleanup
 
 ---
 
+### Phase 5: Core Training Patterns (e2e_tinker_api) 🆕
+
+**Goal:** Validate essential training loop patterns from tinker-cookbook
+
+**Prerequisites:** Phase 1, 2, 3, & 4 tests passing
+
+#### ✅ test_sampling_params_variations.py
+- **Difficulty:** Low
+- **Validates:** Different sampling strategies for inference and RL rollouts
+- **Status:** ✅ PASSING (2025-10-29)
+- **Key Concepts:**
+  - Greedy decoding (temperature=0.0) - deterministic evaluation
+  - Nucleus sampling (top_p=0.9, T=0.7) - balanced exploration for RL
+  - Top-k sampling (top_k=50, T=1.0) - controlled diversity
+  - High temperature (T=1.5) - maximum exploration
+- **Cookbook Reference:** All RL recipes, `completers.py`
+- **Why Critical:**
+  - Evaluation requires deterministic outputs (T=0.0)
+  - RL rollouts need diverse trajectories (T=0.7-1.0)
+  - Used in EVERY RL recipe for sampling
+
+#### ✅ test_sl_loop_minimal.py
+- **Difficulty:** Low-Medium
+- **Validates:** Minimal SFT training loop without abstractions
+- **Status:** ✅ PASSING (2025-10-29)
+- **Key Concepts:**
+  - Linear LR schedule: `lr = base_lr * (1 - step / total_steps)`
+  - Training loop: batch iteration with forward_backward + optim_step
+  - Metric logging every step (loss, learning rate)
+  - Periodic checkpointing every N steps
+  - Multi-batch training pattern
+- **Cookbook Reference:** `recipes/sl_loop.py` (156 lines)
+- **Why Critical:**
+  - Foundation pattern for ALL training recipes (SFT, RL, DPO)
+  - LR scheduling critical for training stability and convergence
+  - Checkpointing enables training resumption
+  - This is the "hello world" of real training loops
+
+#### ✅ test_evaluator_integration.py
+- **Difficulty:** Low
+- **Validates:** Periodic evaluation during training
+- **Status:** ✅ PASSING (2025-10-29)
+- **Key Concepts:**
+  - Evaluator callback pattern
+  - Periodic evaluation: `if step % eval_every == 0: eval_metrics = evaluator(...)`
+  - Dual metric logging (training + evaluation)
+  - Test set validation during training
+- **Cookbook Reference:** `eval/evaluators.py`, `supervised/train.py`
+- **Why Critical:**
+  - Detects overfitting (test loss diverges from train loss)
+  - Guides hyperparameter tuning
+  - Enables early stopping
+  - Used in ALL cookbook recipes for validation
+
+---
+
+## Phase 5: Running Core Training Pattern Tests
+
+### Prerequisites
+```bash
+export TINKER_BASE_URL="http://kgateway-training.slime-gmi:8000"
+export TINKER_API_KEY="slime-dev-key"
+```
+
+### Test Execution (in slime-training pod)
+```bash
+# Run cleanup before tests
+cd /tmp/tinker_gmi/tests_integration && python -u cleanup_test_env.py
+
+# Run Phase 5 tests
+cd /tmp/tinker_gmi/tests_integration/e2e_tinker_api
+python -u test_sampling_params_variations.py    # ✅ PASSING - Sampling strategies
+python -u cleanup_test_env.py
+
+python -u test_sl_loop_minimal.py               # ✅ PASSING - Core training loop
+python -u cleanup_test_env.py
+
+python -u test_evaluator_integration.py         # ✅ PASSING - Periodic evaluation
+python -u cleanup_test_env.py
+```
+
+### ✅ All Phase 5 Tests Passing (2025-10-29)
+- test_sampling_params_variations.py - PASSED
+- test_sl_loop_minimal.py - PASSED
+- test_evaluator_integration.py - PASSED
+
+---
+
 ## Summary
 
 This curriculum learning approach ensures:
@@ -461,8 +549,9 @@ This curriculum learning approach ensures:
 - Phase 2 (Client Basics): 4 tests ✅
 - Phase 3 (Training Workflows): 3 tests ✅
 - Phase 4 (Advanced Patterns): 3 tests ✅
+- Phase 5 (Core Training Patterns): 3 tests ✅ 🆕
 
-**Total: 16/16 end-to-end tests passing ✅**
+**Total: 19/19 end-to-end tests passing ✅**
 
 ### Major Infrastructure Improvements (2025-10-28):
 - ✅ Enhanced cleanup workflow - NO MORE POD RESTARTS!
