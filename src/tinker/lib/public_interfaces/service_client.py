@@ -78,7 +78,7 @@ class ServiceClient(TelemetryProvider):
         return await self._get_server_capabilities_submit()
 
     def _create_model_submit(
-        self, base_model: str, lora_config: types.LoraConfig, debug_train_only: bool = False, checkpoint_path: str | None = None
+        self, base_model: str, lora_config: types.LoraConfig, debug_train_only: bool = False, checkpoint_path: str | None = None, user_metadata: dict | None = None
     ) -> AwaitableConcurrentFuture[types.ModelID]:
         async def _create_model_async():
             start_time = time.time()
@@ -86,6 +86,8 @@ class ServiceClient(TelemetryProvider):
                 extra_body = {"debug_train_only": debug_train_only}
                 if checkpoint_path:
                     extra_body["checkpoint_path"] = checkpoint_path
+                if user_metadata:
+                    extra_body["user_metadata"] = user_metadata
                 future = await client.models.create(
                     base_model=base_model,
                     lora_config=_to_lora_config_params(lora_config),
@@ -114,6 +116,7 @@ class ServiceClient(TelemetryProvider):
         train_unembed: bool = True,
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
+        user_metadata: dict | None = None,
     ) -> TrainingClient:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -129,6 +132,7 @@ class ServiceClient(TelemetryProvider):
             ),
             debug_train_only=debug_train_only,
             checkpoint_path=checkpoint_path,
+            user_metadata=user_metadata,
         ).result()
         logger.info(f"Creating TrainingClient for {model_id=}")
         return self.create_training_client(model_id)
@@ -144,6 +148,7 @@ class ServiceClient(TelemetryProvider):
         train_unembed: bool = True,
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
+        user_metadata: dict | None = None,
     ) -> TrainingClient:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -159,6 +164,7 @@ class ServiceClient(TelemetryProvider):
             ),
             debug_train_only=debug_train_only,
             checkpoint_path=checkpoint_path,
+            user_metadata=user_metadata,
         )
         logger.info(f"Creating TrainingClient for {model_id=}")
         return self.create_training_client(model_id)
