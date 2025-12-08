@@ -1,0 +1,5 @@
+{"prompt": "What is 2+2?", "response": "4"}
+{"prompt": "What is the capital of France?", "response": "Paris"}
+{"prompt": "Write a hello world program", "response": "print('Hello, World!')"}
+{"prompt": "What color is the sky?", "response": "blue"}
+{"prompt": "How many days in a week?", "response": "7"}
