@@ -23,6 +23,12 @@ class CreateModelRequest(StrictBase):
     lora_config: Optional[LoraConfig] = None
     """LoRA configuration"""
 
+    # GMI-specific: enable debug mode for testing
+    debug_train_only: bool = False
+
+    # GMI-specific: load checkpoint during model creation (for Slime/Megatron)
+    checkpoint_path: Optional[str] = None
+
     type: Literal["create_model"] = "create_model"
 
     if PYDANTIC_V2:

@@ -117,6 +117,8 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool,
         train_unembed: bool,
         user_metadata: dict[str, str] | None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -140,6 +142,8 @@ class ServiceClient(TelemetryProvider):
                     base_model=base_model,
                     lora_config=lora_config,
                     user_metadata=user_metadata,
+                    debug_train_only=debug_train_only,
+                    checkpoint_path=checkpoint_path,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -172,6 +176,8 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         user_metadata: dict[str, str] | None = None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -183,6 +189,8 @@ class ServiceClient(TelemetryProvider):
         - `train_attn`: Whether to train attention layers (default True)
         - `train_unembed`: Whether to train unembedding layers (default True)
         - `user_metadata`: Optional metadata to attach to the training run
+        - `debug_train_only`: GMI-specific: enable debug mode for testing
+        - `checkpoint_path`: GMI-specific: load checkpoint during model creation
 
         Returns:
         - `TrainingClient` configured for LoRA training
@@ -206,6 +214,8 @@ class ServiceClient(TelemetryProvider):
             train_attn,
             train_unembed,
             user_metadata,
+            debug_train_only,
+            checkpoint_path,
         ).result()
 
     @capture_exceptions(fatal=True)
@@ -218,6 +228,8 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         user_metadata: dict[str, str] | None = None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -228,6 +240,8 @@ class ServiceClient(TelemetryProvider):
             train_attn,
             train_unembed,
             user_metadata,
+            debug_train_only,
+            checkpoint_path,
         ).result_async()
 
     @sync_only
@@ -260,6 +274,7 @@ class ServiceClient(TelemetryProvider):
         # Use weights info endpoint which allows access to models with public checkpoints
         weights_info = rest_client.get_weights_info_by_tinker_path(path).result()
 
+        # GMI: Use checkpoint_path to load during initialization (Slime/Megatron pattern)
         training_client = self.create_lora_training_client(
             base_model=weights_info.base_model,
             rank=weights_info.lora_rank,
@@ -269,9 +284,10 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,
         )
 
-        training_client.load_state(path).result()
+        # No need to call load_state() - checkpoint is loaded during create_model
         return training_client
 
     @capture_exceptions(fatal=True)
@@ -286,6 +302,7 @@ class ServiceClient(TelemetryProvider):
         # Right now all training runs are LoRa runs.
         assert weights_info.is_lora and weights_info.lora_rank is not None
 
+        # GMI: Use checkpoint_path to load during initialization (Slime/Megatron pattern)
         training_client = await self.create_lora_training_client_async(
             base_model=weights_info.base_model,
             rank=weights_info.lora_rank,
@@ -295,10 +312,10 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,
         )
 
-        load_future = await training_client.load_state_async(path)
-        await load_future.result_async()
+        # No need to call load_state() - checkpoint is loaded during create_model
         return training_client
 
     @sync_only
