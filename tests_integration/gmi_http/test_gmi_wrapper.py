@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 import requests
 
 # Configuration
-GMI_BASE_URL = os.getenv("GMI_BASE_URL", "http://localhost:8000")
+GMI_BASE_URL = os.getenv("GMI_BASE_URL", "http://kgateway-training.miles-gmi-tinker:8000")
 GMI_API_KEY = os.getenv("GMI_API_KEY", "slime-dev-key")
 POLL_INTERVAL = 2.0  # seconds
 MAX_WAIT_TIME = 300  # 5 minutes max
