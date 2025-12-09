@@ -210,7 +210,7 @@ def test_gradient_accumulation():
     print(f"  ✓ Single optimizer step applied all accumulated gradients")
 
     # Cleanup (skipped - cleanup_test_env.py handles this)
-    # training_client.delete_model()
+    # training_client.unload()  # Use Tinker's native unload method
     # print(f"\n✓ Model cleanup completed")
 
     print("\n" + "=" * 80)

@@ -272,7 +272,7 @@ def test_kl_divergence_tracking():
     print(f"✓ KL divergence tracking completed")
 
     # Cleanup (skipped - cleanup_test_env.py handles this)
-    # training_client.delete_model()
+    # training_client.unload()  # Use Tinker's native unload method
     # print(f"\n✓ Model cleanup completed")
 
     print("\n" + "=" * 80)
