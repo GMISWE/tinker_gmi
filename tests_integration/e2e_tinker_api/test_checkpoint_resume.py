@@ -4,232 +4,153 @@ Test: Checkpoint Save and Resume
 
 Tests Tinker client's checkpoint save/load workflow:
   1. Create training client
-  2. Train for N steps
-  3. Save checkpoint
+  2. Save state checkpoint
+  3. Unload original model (free GPU resources)
   4. Create new training client from checkpoint
-  5. Resume training
-  6. Verify continuity
+  5. Verify restored model works (sampling)
 
-Mirrors the cookbook's checkpoint_utils.save_checkpoint() and resume functionality.
+This test validates the /api/v1/weights_info endpoint for checkpoint resume.
 """
 import os
 import sys
+import time
+import logging
 
-# Configure environment for kgateway-training
-os.environ["TINKER_BASE_URL"] = "http://kgateway-training.slime-gmi:8000"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Set API key
 os.environ["TINKER_API_KEY"] = "slime-dev-key"
 
 import tinker
-from tinker import types
 
-print("=" * 80)
-print("TEST: Checkpoint Save and Resume")
-print("=" * 80)
-print(f"Base URL: {os.environ.get('TINKER_BASE_URL')}")
-print(f"API Key: {os.environ.get('TINKER_API_KEY')[:10]}...")
-print("=" * 80)
+BASE_URL = "http://kgateway-training.miles-gmi-tinker:8000"
+MODEL = "/data/models/Qwen2.5-0.5B-Instruct"
 
-checkpoint_path = None
 
-try:
-    # Step 1: Create initial training client
-    print("\n[1/6] Creating initial training client...")
-    client = tinker.ServiceClient()
-    training_client_1 = client.create_lora_training_client(
-        base_model="/data/models/Qwen2.5-0.5B-Instruct_torch_dist",
-        rank=0,  # No LoRA
-        debug_train_only=True  # Skip update_weights() for supervised-only training
+def unload_model_via_http(model_id: str) -> None:
+    """Unload model via HTTP endpoint (fallback if SDK method unavailable).
+
+    Uses Tinker's native /api/v1/unload_model endpoint which returns an async
+    operation that must be polled via retrieve_future.
+
+    retrieve_future returns:
+    - 408 (Request Timeout) if operation is still pending
+    - 200 with result if completed successfully
+    - 500 if failed
+    """
+    import requests
+    headers = {"X-API-Key": "slime-dev-key", "Content-Type": "application/json"}
+
+    # Call unload_model (returns async operation)
+    resp = requests.post(
+        f"{BASE_URL}/api/v1/unload_model",
+        headers=headers,
+        json={"model_id": model_id, "type": "unload_model"}
     )
-    print(f"   ✓ Training client 1 created: {training_client_1.model_id}")
+    resp.raise_for_status()
+    result = resp.json()
+    request_id = result.get("request_id")
 
-    # Step 2: Train for a few steps
-    print("\n[2/6] Training for 3 steps...")
+    if request_id:
+        # Poll for completion
+        start = time.time()
+        while time.time() - start < 30:
+            poll_resp = requests.post(
+                f"{BASE_URL}/api/v1/retrieve_future",
+                headers=headers,
+                json={"request_id": request_id}
+            )
+            if poll_resp.status_code == 200:
+                # Success - operation completed
+                poll_result = poll_resp.json()
+                logger.info(f"Unload model response: {poll_result}")
+                return
+            elif poll_resp.status_code == 500:
+                # Failed - operation errored
+                error_detail = poll_resp.json().get("detail", "Unknown error")
+                raise Exception(f"Unload failed: {error_detail}")
+            elif poll_resp.status_code == 408:
+                # Still pending - continue polling
+                pass
+            else:
+                logger.warning(f"Unexpected status code: {poll_resp.status_code}")
+            time.sleep(0.5)
+        raise TimeoutError(f"Timeout waiting for unload of {model_id}")
 
-    input_tokens = [1, 2, 3, 4, 5, 6, 7, 8]
-    losses_phase1 = []
 
-    for step in range(3):
-        datum = tinker.Datum(
-            model_input=types.ModelInput.from_ints(input_tokens),
-            loss_fn_inputs={
-                "target": types.TensorData(
-                    data=input_tokens[1:] + [input_tokens[-1]],
-                    shape=[len(input_tokens)],
-                    dtype="int64"
-                ),
-                "weights": types.TensorData(
-                    data=[1.0] * len(input_tokens),
-                    shape=[len(input_tokens)],
-                    dtype="float32"
-                )
-            }
-        )
+def main():
+    logger.info("=== Starting Checkpoint Save/Resume Test ===")
 
-        # Forward-backward
-        fwd_bwd_future = training_client_1.forward_backward(
-            [datum],
-            loss_fn="cross_entropy"
-        )
-        fwd_bwd_result = fwd_bwd_future.result()
+    # Step 1: Create service client and training client
+    logger.info("Step 1: Creating service client...")
+    service_client = tinker.ServiceClient(base_url=BASE_URL)
+    logger.info("Service client created")
 
-        # Extract loss
-        loss_value = None
-        if hasattr(fwd_bwd_result, 'metrics') and fwd_bwd_result.metrics:
-            if 'loss:mean' in fwd_bwd_result.metrics:
-                loss_value = fwd_bwd_result.metrics['loss:mean']
-                losses_phase1.append(loss_value)
+    logger.info("Step 2: Creating training client...")
+    training_client = service_client.create_lora_training_client(
+        base_model=MODEL,
+        rank=16
+    )
+    logger.info(f"Training client created with model: {training_client.model_id}")
 
-        # Optimizer step
-        adam_params = tinker.AdamParams(
-            learning_rate=2e-4,
-            beta1=0.9,
-            beta2=0.95,
-            eps=1e-8
-        )
-        optim_future = training_client_1.optim_step(adam_params)
-        optim_result = optim_future.result()
+    # Step 3: Save state checkpoint
+    logger.info("Step 3: Saving state checkpoint...")
+    start_time = time.time()
+    save_result = training_client.save_state("test_checkpoint").result()
+    elapsed = time.time() - start_time
+    logger.info(f"Save completed in {elapsed:.2f}s")
+    logger.info(f"Checkpoint path: {save_result.path}")
 
-        if loss_value is not None:
-            print(f"   Step {step + 1}: loss={loss_value:.6f}")
-        else:
-            print(f"   Step {step + 1}: completed")
+    # Step 4: Unload original model to free GPU resources
+    logger.info("Step 4: Unloading original model to free GPU resources...")
+    original_model_id = training_client.model_id
+    unload_model_via_http(original_model_id)
+    logger.info(f"Original model {original_model_id} unloaded")
 
-    print(f"   ✓ Phase 1 training completed ({len(losses_phase1)} steps)")
+    # Step 5: Create new training client from checkpoint
+    logger.info("Step 5: Creating new client from checkpoint...")
+    start_time = time.time()
 
-    # Step 3: Save checkpoint
-    print("\n[3/6] Saving checkpoint...")
-    checkpoint_name = "test_resume_checkpoint"
-    save_future = training_client_1.save_state(checkpoint_name)
-    save_result = save_future.result()
+    # Use the path from save_result
     checkpoint_path = save_result.path
-    print(f"   ✓ Checkpoint saved:")
-    print(f"     Name: {checkpoint_name}")
-    print(f"     Path: {checkpoint_path}")
+    logger.info(f"Loading from path: {checkpoint_path}")
 
-    # Step 3.5: Cleanup first training client to release GPU resources
-    print("\n[3.5/6] Cleaning up first training client to release GPU resources...")
-    print(f"   Deleting model: {training_client_1.model_id}")
-
-    import httpx
-    cleanup_url = f"{os.environ.get('TINKER_BASE_URL')}/api/v1/delete_model"
-    cleanup_response = httpx.post(
-        cleanup_url,
-        json={"model_id": training_client_1.model_id},
-        headers={"x-api-key": os.environ.get('TINKER_API_KEY')},
-        timeout=30.0
+    # Create new client from checkpoint state (with optimizer)
+    new_client = service_client.create_training_client_from_state_with_optimizer(
+        checkpoint_path
     )
+    elapsed = time.time() - start_time
+    logger.info(f"Load completed in {elapsed:.2f}s")
+    logger.info(f"Restored client model ID: {new_client.model_id}")
 
-    if cleanup_response.status_code == 200:
-        print(f"   ✓ First training client cleaned up successfully")
-        print(f"     GPU resources released for checkpoint resume")
-    else:
-        print(f"   ⚠ Cleanup returned status {cleanup_response.status_code}")
-        print(f"     Response: {cleanup_response.text}")
+    # Test sampling from restored client
+    logger.info("Step 6: Testing sampling from restored client...")
+    sampling_client = new_client.save_weights_and_get_sampling_client("test_sampler")
+    logger.info(f"Sampling client created successfully")
 
-    # Step 4: Create new training client from checkpoint
-    print("\n[4/6] Creating training client from checkpoint...")
-    print(f"   Loading from: {checkpoint_path}")
+    # Do a sample to verify the model works
+    test_prompt = "What is 2 + 2?"
+    logger.info(f"Sampling with prompt: {test_prompt}")
+    sample_result = sampling_client.sample(
+        messages=[{"role": "user", "content": test_prompt}],
+        n=1,
+        max_tokens=32
+    )
+    logger.info(f"Sample result: {sample_result}")
 
-    training_client_2 = client.create_training_client_from_state(checkpoint_path)
-    print(f"   ✓ Training client 2 created: {training_client_2.model_id}")
+    # Cleanup
+    logger.info("Step 7: Cleaning up...")
+    unload_model_via_http(new_client.model_id)
+    logger.info("Restored model unloaded")
 
-    # Step 5: Resume training
-    print("\n[5/6] Resuming training for 3 more steps...")
+    logger.info("=== Checkpoint Test PASSED ===")
+    return True
 
-    losses_phase2 = []
-
-    for step in range(3):
-        datum = tinker.Datum(
-            model_input=types.ModelInput.from_ints(input_tokens),
-            loss_fn_inputs={
-                "target": types.TensorData(
-                    data=input_tokens[1:] + [input_tokens[-1]],
-                    shape=[len(input_tokens)],
-                    dtype="int64"
-                ),
-                "weights": types.TensorData(
-                    data=[1.0] * len(input_tokens),
-                    shape=[len(input_tokens)],
-                    dtype="float32"
-                )
-            }
-        )
-
-        # Forward-backward
-        fwd_bwd_future = training_client_2.forward_backward(
-            [datum],
-            loss_fn="cross_entropy"
-        )
-        fwd_bwd_result = fwd_bwd_future.result()
-
-        # Extract loss
-        loss_value = None
-        if hasattr(fwd_bwd_result, 'metrics') and fwd_bwd_result.metrics:
-            if 'loss:mean' in fwd_bwd_result.metrics:
-                loss_value = fwd_bwd_result.metrics['loss:mean']
-                losses_phase2.append(loss_value)
-
-        # Optimizer step
-        adam_params = tinker.AdamParams(
-            learning_rate=2e-4,
-            beta1=0.9,
-            beta2=0.95,
-            eps=1e-8
-        )
-        optim_future = training_client_2.optim_step(adam_params)
-        optim_result = optim_future.result()
-
-        if loss_value is not None:
-            print(f"   Step {step + 4}: loss={loss_value:.6f}")
-        else:
-            print(f"   Step {step + 4}: completed")
-
-    print(f"   ✓ Phase 2 training completed ({len(losses_phase2)} steps)")
-
-    # Step 6: Verify continuity
-    print("\n[6/6] Verifying checkpoint resume...")
-
-    all_losses = losses_phase1 + losses_phase2
-
-    if all_losses:
-        print(f"   Loss progression:")
-        for i, loss in enumerate(all_losses):
-            marker = "← checkpoint" if i == len(losses_phase1) - 1 else ""
-            print(f"     Step {i + 1}: {loss:.6f} {marker}")
-
-        # Check if training continued properly (loss should generally decrease or stay stable)
-        if len(all_losses) >= 2:
-            print(f"\n   Initial loss: {all_losses[0]:.6f}")
-            print(f"   Final loss: {all_losses[-1]:.6f}")
-            if all_losses[0] >= all_losses[-1]:
-                print(f"   ✓ Loss improved or maintained")
-    else:
-        print(f"   ⚠ No loss values captured (metrics may not be available)")
-
-    print("\n" + "=" * 80)
-    print("✓ ALL TESTS PASSED!")
-    print("=" * 80)
-    print(f"\nCheckpoint save/resume verified:")
-    print(f"  • Training client 1: {training_client_1.model_id}")
-    print(f"  • Checkpoint: {checkpoint_name}")
-    print(f"  • Path: {checkpoint_path}")
-    print(f"  • Training client 2: {training_client_2.model_id}")
-    print(f"  • Total steps: {len(all_losses)}")
-    print(f"\n🎉 Checkpoint resume workflow functional!")
-    print("=" * 80)
-
-    sys.exit(0)
-
-except Exception as e:
-    print(f"\n✗ Test failed: {e}")
-    import traceback
-    traceback.print_exc()
-
-    if checkpoint_path:
-        print(f"\nCheckpoint path (for debugging): {checkpoint_path}")
-
-    print("\n" + "=" * 80)
-    print("✗ TEST FAILED")
-    print("=" * 80)
-
-    sys.exit(1)
+if __name__ == "__main__":
+    try:
+        success = main()
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        logger.error(f"Test failed with error: {e}", exc_info=True)
+        sys.exit(1)

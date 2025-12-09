@@ -3,19 +3,20 @@
 Cleanup script for test environment - replaces kgateway restart
 
 This script performs two cleanup operations:
-1. Delete all active models (frees GPU resources via Ray)
+1. Unload all active models (frees GPU resources via Ray) using Tinker's unload_model endpoint
 2. Clear old futures from database (removes stale request state)
 
 Usage:
     python cleanup_test_env.py
-    
+
 Environment variables:
-    TINKER_BASE_URL - kgateway URL (default: http://kgateway-training.slime-gmi:8000)
+    TINKER_BASE_URL - kgateway URL (default: http://kgateway-training.miles-gmi-tinker:8000)
     TINKER_API_KEY - API key (default: slime-dev-key)
 """
 import requests
 import os
 import sys
+import time
 
 base_url = os.environ.get("TINKER_BASE_URL", "http://kgateway-training.miles-gmi-tinker:8000")
 api_key = os.environ.get("TINKER_API_KEY", "slime-dev-key")
@@ -26,7 +27,38 @@ print("=" * 80)
 print(f"Base URL: {base_url}")
 print("=" * 80)
 
-# Step 1: Get list of active models and delete them
+
+def poll_future(request_id: str, timeout: float = 30.0) -> dict:
+    """Poll retrieve_future until completion or timeout.
+
+    retrieve_future returns:
+    - 408 (Request Timeout) if operation is still pending
+    - 200 with result if completed successfully
+    - 500 if failed
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = requests.post(
+            f"{base_url}/api/v1/retrieve_future",
+            json={"request_id": request_id},
+            headers={"X-API-Key": api_key},
+            timeout=10
+        )
+        if resp.status_code == 200:
+            # Success - operation completed
+            return resp.json()
+        elif resp.status_code == 500:
+            # Failed - operation errored
+            error_detail = resp.json().get("detail", "Unknown error")
+            raise Exception(f"Operation failed: {error_detail}")
+        elif resp.status_code == 408:
+            # Still pending - continue polling
+            pass
+        time.sleep(0.5)
+    raise TimeoutError(f"Timeout waiting for request {request_id}")
+
+
+# Step 1: Get list of active models and unload them
 print("\n[1/3] Checking for active models...")
 try:
     response = requests.get(
@@ -47,24 +79,30 @@ try:
             print(f"   ⚠ Warning: {active_models} active models found")
             print(f"   Model IDs: {model_ids}")
 
-            # Delete each model
+            # Unload each model using Tinker's unload_model endpoint
             for model_id in model_ids:
-                print(f"   Deleting model: {model_id}...")
+                print(f"   Unloading model: {model_id}...")
                 try:
-                    del_response = requests.post(
-                        f"{base_url}/api/v1/delete_model",
-                        json={"model_id": model_id},
+                    # Call unload_model (returns async operation)
+                    unload_response = requests.post(
+                        f"{base_url}/api/v1/unload_model",
+                        json={"model_id": model_id, "type": "unload_model"},
                         headers={"X-API-Key": api_key},
                         timeout=30
                     )
 
-                    if del_response.status_code == 200:
-                        print(f"   ✓ Deleted model: {model_id}")
+                    if unload_response.status_code == 200:
+                        result = unload_response.json()
+                        request_id = result.get("request_id")
+                        if request_id:
+                            # Poll for completion
+                            poll_future(request_id)
+                        print(f"   ✓ Unloaded model: {model_id}")
                     else:
-                        print(f"   ✗ Failed to delete {model_id}: {del_response.status_code}")
+                        print(f"   ✗ Failed to unload {model_id}: {unload_response.status_code}")
 
                 except Exception as e:
-                    print(f"   ✗ Error deleting {model_id}: {e}")
+                    print(f"   ✗ Error unloading {model_id}: {e}")
     else:
         print(f"   ✗ Health check failed: {response.status_code}")
 
@@ -101,7 +139,7 @@ print("\n" + "=" * 80)
 print("✓ CLEANUP COMPLETE")
 print("=" * 80)
 print("\nRecommendations:")
-print("  1. Each test should call delete_model() to cleanup its own training client")
+print("  1. Each test should call training_client.unload() to cleanup its own training client")
 print("  2. Run this script before test sessions to clear stale futures")
 print("  3. Verify Ray actors are cleaned up: ray list actors --filter state=ALIVE")
 print("=" * 80)
