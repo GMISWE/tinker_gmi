@@ -349,6 +349,8 @@ class ServiceClient(TelemetryProvider):
         # Use weights info endpoint which allows access to models with public checkpoints
         weights_info = rest_client.get_weights_info_by_tinker_path(path).result()
 
+        # GMI: Use checkpoint_path to load during initialization (Slime/Megatron pattern)
+        # kgateway's checkpoint loading via args.load includes optimizer state
         training_client = self.create_lora_training_client(
             base_model=weights_info.base_model,
             rank=weights_info.lora_rank,
@@ -358,9 +360,10 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,
         )
 
-        training_client.load_state_with_optimizer(path).result()
+        # No need to call load_state_with_optimizer() - checkpoint is loaded during create_model
         return training_client
 
     @capture_exceptions(fatal=True)
@@ -375,6 +378,8 @@ class ServiceClient(TelemetryProvider):
         # Right now all training runs are LoRa runs.
         assert weights_info.is_lora and weights_info.lora_rank is not None
 
+        # GMI: Use checkpoint_path to load during initialization (Slime/Megatron pattern)
+        # kgateway's checkpoint loading via args.load includes optimizer state
         training_client = await self.create_lora_training_client_async(
             base_model=weights_info.base_model,
             rank=weights_info.lora_rank,
@@ -384,10 +389,10 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,
         )
 
-        load_future = await training_client.load_state_with_optimizer_async(path)
-        await load_future.result_async()
+        # No need to call load_state_with_optimizer_async() - checkpoint is loaded during create_model
         return training_client
 
     @capture_exceptions(fatal=True)
