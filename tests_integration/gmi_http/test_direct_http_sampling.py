@@ -7,7 +7,7 @@ import requests
 import time
 import json
 
-BASE_URL = "http://kgateway-training.slime-gmi:8000"
+BASE_URL = "http://kgateway-training.miles-gmi-tinker:8000"
 API_KEY = "slime-dev-key"
 
 headers = {
@@ -54,19 +54,19 @@ while time.time() - start < max_wait:
     )
     result = response.json()
 
-    if result.get("type") == "try_again":
+    if response.status_code == 408:
         print(f"  Still waiting... ({int(time.time() - start)}s)")
         time.sleep(5)
         continue
 
-    # Check if model creation is complete
-    if "model_id" in result and result.get("status") == "ready":
+    if response.status_code == 200:
+        # Model creation complete
         print(f"✓ Model created successfully!")
-        print(f"  Model ID: {result['model_id']}")
-        model_id = result["model_id"]
+        print(f"  Model ID: {result.get('model_id')}")
+        model_id = result.get("model_id")
         break
 
-    print(f"✗ Unexpected response: {result}")
+    print(f"✗ Unexpected status {response.status_code}: {result}")
     exit(1)
 else:
     print(f"✗ Timeout waiting for model creation")
@@ -110,20 +110,21 @@ while time.time() - start < max_wait:
     )
     result = response.json()
 
-    if result.get("type") == "try_again":
+    if response.status_code == 408:
         print(f"  Still waiting... ({int(time.time() - start)}s)")
         time.sleep(5)
         continue
 
-    if result.get("type") == "sample":
+    if response.status_code == 200:
         print(f"✓ Sampling completed successfully!")
-        print(f"  Generated {len(result['sequences'])} samples:")
-        for i, seq in enumerate(result["sequences"]):
-            print(f"    Sample {i+1}: {len(seq['tokens'])} tokens, stop_reason={seq['stop_reason']}")
-            print(f"      First 5 tokens: {seq['tokens'][:5]}")
+        sequences = result.get('sequences', [])
+        print(f"  Generated {len(sequences)} samples:")
+        for i, seq in enumerate(sequences):
+            print(f"    Sample {i+1}: {len(seq.get('tokens', []))} tokens, stop_reason={seq.get('stop_reason')}")
+            print(f"      First 5 tokens: {seq.get('tokens', [])[:5]}")
         break
 
-    print(f"✗ Unexpected response: {result}")
+    print(f"✗ Unexpected status {response.status_code}: {result}")
     exit(1)
 else:
     print(f"✗ Timeout waiting for sampling")
