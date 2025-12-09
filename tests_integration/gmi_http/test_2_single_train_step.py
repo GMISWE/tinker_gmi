@@ -14,7 +14,7 @@ import time
 import sys
 
 # Configuration (updated for kgateway-training)
-GMI_URL = "http://kgateway-training.slime-gmi:8000"
+GMI_URL = "http://kgateway-training.miles-gmi-tinker:8000"
 API_KEY = "slime-dev-key"
 headers = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 
