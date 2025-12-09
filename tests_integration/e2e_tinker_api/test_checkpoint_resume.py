@@ -132,12 +132,20 @@ def main():
     # Do a sample to verify the model works
     test_prompt = "What is 2 + 2?"
     logger.info(f"Sampling with prompt: {test_prompt}")
-    sample_result = sampling_client.sample(
-        messages=[{"role": "user", "content": test_prompt}],
-        n=1,
-        max_tokens=32
+
+    # Get tokenizer and encode prompt
+    tokenizer = new_client.get_tokenizer()
+    tokens = tokenizer.encode(test_prompt, add_special_tokens=True)
+    prompt = tinker.ModelInput.from_ints(tokens)
+    sampling_params = tinker.SamplingParams(max_tokens=32)
+
+    sample_future = sampling_client.sample(
+        prompt=prompt,
+        num_samples=1,
+        sampling_params=sampling_params
     )
-    logger.info(f"Sample result: {sample_result}")
+    sample_result = sample_future.result()
+    logger.info(f"Sample result: {sample_result.sequences[0].tokens[:10]}...")
 
     # Cleanup
     logger.info("Step 7: Cleaning up...")
