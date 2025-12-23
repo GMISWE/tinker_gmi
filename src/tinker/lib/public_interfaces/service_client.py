@@ -110,6 +110,7 @@ class ServiceClient(TelemetryProvider):
         user_metadata: dict[str, str] | None,
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -135,6 +136,7 @@ class ServiceClient(TelemetryProvider):
                     user_metadata=user_metadata,
                     debug_train_only=debug_train_only,
                     checkpoint_path=checkpoint_path,
+                    max_batch_size=max_batch_size,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -168,6 +170,7 @@ class ServiceClient(TelemetryProvider):
         user_metadata: dict[str, str] | None = None,
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -181,6 +184,7 @@ class ServiceClient(TelemetryProvider):
         - `user_metadata`: Optional metadata to attach to the training run
         - `debug_train_only`: GMI-specific: enable debug mode for testing
         - `checkpoint_path`: GMI-specific: load checkpoint during model creation
+        - `max_batch_size`: GMI-specific: max batch size for forward_backward (avoids gradient accumulation)
 
         Returns:
         - `TrainingClient` configured for LoRA training
@@ -206,6 +210,7 @@ class ServiceClient(TelemetryProvider):
             user_metadata,
             debug_train_only,
             checkpoint_path,
+            max_batch_size,
         ).result()
 
     @capture_exceptions(fatal=True)
@@ -220,6 +225,7 @@ class ServiceClient(TelemetryProvider):
         user_metadata: dict[str, str] | None = None,
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -232,6 +238,7 @@ class ServiceClient(TelemetryProvider):
             user_metadata,
             debug_train_only,
             checkpoint_path,
+            max_batch_size,
         ).result_async()
 
     @sync_only
