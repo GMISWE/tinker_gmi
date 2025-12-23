@@ -127,9 +127,9 @@ class _APIFuture(APIFuture[T]):  # pyright: ignore[reportUnusedClass]
                                 request_id=self.request_id,
                                 allow_metadata_only=allow_metadata_only,
                             ),
-                            timeout=45,
+                            timeout=300,  # Increased from 45 for large responses
                             extra_headers=headers,
-                            max_retries=0,
+                            max_retries=2,  # Enable retries for resilience
                         )
                 except tinker.APIStatusError as e:
                     connection_error_retries = 0

@@ -268,7 +268,8 @@ class InternalClientHolder(AsyncTinkerProvider, TelemetryProvider):
 
     async def _session_heartbeat(self, session_id: str):
         SESSION_HEARTBEAT_PERIOD_SEC = 10
-        SESSION_MISSED_HEARTBEAT_WARNING_THRESHOLD_SEC = 60 * 2
+        # Increased from 120s to 600s - model creation with SGLang KV cache onload can take 5+ mins
+        SESSION_MISSED_HEARTBEAT_WARNING_THRESHOLD_SEC = 60 * 10
         last_heartbeat_time = time.monotonic()
         while True:
             await asyncio.sleep(SESSION_HEARTBEAT_PERIOD_SEC)
