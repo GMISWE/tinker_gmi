@@ -27,6 +27,10 @@ class CreateModelRequest(StrictBase):
     # GMI-specific: load checkpoint during model creation (for Slime/Megatron)
     checkpoint_path: Optional[str] = None
 
+    # GMI-specific: max batch size for forward_backward (avoids gradient accumulation)
+    # Default 4096 accommodates typical RL batch sizes (e.g., groups_per_batch=128 * group_size=16)
+    max_batch_size: int = 4096
+
     type: Literal["create_model"] = "create_model"
 
     if PYDANTIC_V2:

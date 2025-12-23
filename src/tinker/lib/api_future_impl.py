@@ -120,9 +120,9 @@ class _APIFuture(APIFuture[T]):  # pyright: ignore[reportUnusedClass]
                 with self.holder.aclient(ClientConnectionPoolType.RETRIEVE_PROMISE) as client:
                     response = await client.futures.with_raw_response.retrieve(
                         request=FutureRetrieveRequest(request_id=self.request_id),
-                        timeout=45,
+                        timeout=300,  # Increased from 45 for large responses
                         extra_headers=headers,
-                        max_retries=0,
+                        max_retries=2,  # Enable retries for resilience
                     )
             except tinker.APIStatusError as e:
                 connection_error_retries = 0
