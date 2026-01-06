@@ -63,6 +63,7 @@ from .optim_step_response import OptimStepResponse as OptimStepResponse
 from .request_error_category import RequestErrorCategory as RequestErrorCategory
 from .request_failed_response import RequestFailedResponse as RequestFailedResponse
 from .request_id import RequestID as RequestID
+from .rlve_config import RLVEConfig as RLVEConfig
 from .sample_request import SampleRequest as SampleRequest
 from .sample_response import SampleResponse as SampleResponse
 from .sampled_sequence import SampledSequence as SampledSequence
