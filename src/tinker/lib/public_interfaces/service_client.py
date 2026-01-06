@@ -120,6 +120,8 @@ class ServiceClient(TelemetryProvider):
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
         max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -146,6 +148,8 @@ class ServiceClient(TelemetryProvider):
                     debug_train_only=debug_train_only,
                     checkpoint_path=checkpoint_path,
                     max_batch_size=max_batch_size,
+                    max_seq_len=max_seq_len,
+                    rlve_config=rlve_config,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -181,6 +185,8 @@ class ServiceClient(TelemetryProvider):
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
         max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -195,6 +201,7 @@ class ServiceClient(TelemetryProvider):
         - `debug_train_only`: GMI-specific: enable debug mode for testing
         - `checkpoint_path`: GMI-specific: load checkpoint during model creation
         - `max_batch_size`: GMI-specific: max batch size for forward_backward (avoids gradient accumulation)
+        - `rlve_config`: GMI-specific: RLVE configuration for GRPO native options
 
         Returns:
         - `TrainingClient` configured for LoRA training
@@ -221,6 +228,8 @@ class ServiceClient(TelemetryProvider):
             debug_train_only,
             checkpoint_path,
             max_batch_size,
+            max_seq_len,
+            rlve_config,
         ).result()
 
     @capture_exceptions(fatal=True)
@@ -236,6 +245,8 @@ class ServiceClient(TelemetryProvider):
         debug_train_only: bool = False,
         checkpoint_path: str | None = None,
         max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -249,6 +260,8 @@ class ServiceClient(TelemetryProvider):
             debug_train_only,
             checkpoint_path,
             max_batch_size,
+            max_seq_len,
+            rlve_config,
         ).result_async()
 
     @sync_only
