@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # FwdBwdChunkSize
 MAX_CHUNK_LEN = 1024
-MAX_CHUNK_BYTES_COUNT = 5000000
+MAX_CHUNK_BYTES_COUNT = 500000000  # 500MB - adequate for large RL batches
 MODEL_ID_NOT_SET_ERROR = "model_id must be set before calling forward. Try initializing the TrainingClient with a model_id by either calling create_lora_training_client on the ServiceClient, or initiliazing the TrainingClient with an existing model_id."
 
 CustomLossFnV1 = Callable[[List[types.Datum], List[Any]], Tuple[Any, Dict[str, float]]]
