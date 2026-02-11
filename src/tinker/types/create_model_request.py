@@ -38,6 +38,9 @@ class CreateModelRequest(StrictBase):
     # When > 2048, enables context parallelism (CP=2) for better long-sequence performance
     max_seq_len: int = 2048
 
+    # GMI-specific: learning rate for optimizer (set at model creation time)
+    learning_rate: float = 1e-6
+
     # GMI-specific: RLVE configuration for GRPO native options
     rlve_config: Optional[RLVEConfig] = None
 
