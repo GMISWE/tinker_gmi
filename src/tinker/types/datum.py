@@ -78,6 +78,7 @@ _key_to_type = {
     "weights": "float32",
     "advantages": "float32",
     "logprobs": "float32",
+    "mask": "float32",
     "clip_low_threshold": "float32",
     "clip_high_threshold": "float32",
 }
