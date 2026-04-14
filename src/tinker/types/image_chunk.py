@@ -24,6 +24,12 @@ class ImageChunk(StrictBase):
 
     type: Literal["image"] = "image"
 
+    def __init__(self, **data):
+        # Ensure type is explicitly set so it survives model_dump(exclude_unset=True)
+        # in the SDK's HTTP request serialization.
+        data.setdefault("type", "image")
+        super().__init__(**data)
+
     @field_validator("data", mode="before")
     @classmethod
     def validate_data(cls, value: Union[bytes, str]) -> bytes:
