@@ -81,4 +81,7 @@ _key_to_type = {
     "mask": "float32",
     "clip_low_threshold": "float32",
     "clip_high_threshold": "float32",
+    # GMI-specific: classification labels (feature 004). Seq-cls [B] or
+    # token-cls [S] integer class ids (-100 = ignore).
+    "labels": "int64",
 }

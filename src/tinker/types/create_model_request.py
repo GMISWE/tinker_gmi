@@ -44,6 +44,17 @@ class CreateModelRequest(StrictBase):
     # GMI-specific: RLVE configuration for GRPO native options
     rlve_config: Optional[RLVEConfig] = None
 
+    # GMI-specific: training objective / output head (feature 004 classification).
+    # "language_modeling" (default) is the unchanged causal path; classification
+    # objectives require a classification backend (automodel / megatron_bridge).
+    objective: str = "language_modeling"
+
+    # GMI-specific: number of classes (classification objectives only).
+    num_labels: Optional[int] = None
+
+    # GMI-specific: classification head config (e.g. torch_dtype, target_modules).
+    head_config: Optional[dict[str, Any]] = None
+
     type: Literal["create_model"] = "create_model"
 
     if PYDANTIC_V2:

@@ -122,6 +122,9 @@ class ServiceClient(TelemetryProvider):
         max_batch_size: int = 4096,
         max_seq_len: int = 2048,
         rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -150,6 +153,9 @@ class ServiceClient(TelemetryProvider):
                     max_batch_size=max_batch_size,
                     max_seq_len=max_seq_len,
                     rlve_config=rlve_config,
+                    objective=objective,
+                    num_labels=num_labels,
+                    head_config=head_config,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -187,6 +193,9 @@ class ServiceClient(TelemetryProvider):
         max_batch_size: int = 4096,
         max_seq_len: int = 2048,
         rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -202,6 +211,10 @@ class ServiceClient(TelemetryProvider):
         - `checkpoint_path`: GMI-specific: load checkpoint during model creation
         - `max_batch_size`: GMI-specific: max batch size for forward_backward (avoids gradient accumulation)
         - `rlve_config`: GMI-specific: RLVE configuration for GRPO native options
+        - `objective`: GMI-specific: "language_modeling" (default) | "sequence_classification" |
+          "token_classification". Classification objectives require a classification backend.
+        - `num_labels`: GMI-specific: number of classes (classification objectives only)
+        - `head_config`: GMI-specific: classification head config (e.g. torch_dtype, target_modules)
 
         Returns:
         - `TrainingClient` configured for LoRA training
@@ -230,6 +243,9 @@ class ServiceClient(TelemetryProvider):
             max_batch_size,
             max_seq_len,
             rlve_config,
+            objective=objective,
+            num_labels=num_labels,
+            head_config=head_config,
         ).result()
 
     @capture_exceptions(fatal=True)
@@ -247,6 +263,9 @@ class ServiceClient(TelemetryProvider):
         max_batch_size: int = 4096,
         max_seq_len: int = 2048,
         rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -262,6 +281,9 @@ class ServiceClient(TelemetryProvider):
             max_batch_size,
             max_seq_len,
             rlve_config,
+            objective=objective,
+            num_labels=num_labels,
+            head_config=head_config,
         ).result_async()
 
     @sync_only
