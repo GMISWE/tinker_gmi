@@ -125,6 +125,7 @@ class ServiceClient(TelemetryProvider):
         objective: str = "language_modeling",
         num_labels: int | None = None,
         head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -156,6 +157,7 @@ class ServiceClient(TelemetryProvider):
                     objective=objective,
                     num_labels=num_labels,
                     head_config=head_config,
+                    staleness_k=staleness_k,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -196,6 +198,7 @@ class ServiceClient(TelemetryProvider):
         objective: str = "language_modeling",
         num_labels: int | None = None,
         head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -246,6 +249,7 @@ class ServiceClient(TelemetryProvider):
             objective=objective,
             num_labels=num_labels,
             head_config=head_config,
+            staleness_k=staleness_k,
         ).result()
 
     @capture_exceptions(fatal=True)
@@ -266,6 +270,7 @@ class ServiceClient(TelemetryProvider):
         objective: str = "language_modeling",
         num_labels: int | None = None,
         head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -284,6 +289,7 @@ class ServiceClient(TelemetryProvider):
             objective=objective,
             num_labels=num_labels,
             head_config=head_config,
+            staleness_k=staleness_k,
         ).result_async()
 
     @sync_only

@@ -44,6 +44,12 @@ class CreateModelRequest(StrictBase):
     # GMI-specific: RLVE configuration for GRPO native options
     rlve_config: Optional[RLVEConfig] = None
 
+    # GMI-specific: max sampler weight-version staleness the tenant accepts
+    # (A4 staleness-k). 0 (default) = strict on-policy sampling; k>0 licenses
+    # the service to defer inference-engine weight sync while staleness <= k,
+    # certified per sample response (ver(S)).
+    staleness_k: int = 0
+
     # GMI-specific: training objective / output head (feature 004 classification).
     # "language_modeling" (default) is the unchanged causal path; classification
     # objectives require a classification backend (automodel / megatron_bridge).
