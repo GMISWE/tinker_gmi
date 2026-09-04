@@ -82,8 +82,10 @@ _key_to_type = {
     "weights": "float32",
     "advantages": "float32",
     "logprobs": "float32",
+    "mask": "float32",
     "clip_low_threshold": "float32",
     "clip_high_threshold": "float32",
+    "labels": "int64",  # classification class ids, [B] or [S]; -100 = ignore
 }
 
 _sparse_eligible_keys = {"target_tokens", "weights"}

@@ -183,6 +183,15 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool,
         train_unembed: bool,
         user_metadata: dict[str, str] | None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> AwaitableConcurrentFuture[TrainingClient]:
         assert any([train_mlp, train_attn, train_unembed]), (
             "At least one of train_mlp, train_attn, or train_unembed must be True"
@@ -207,6 +216,15 @@ class ServiceClient(TelemetryProvider):
                     base_model=base_model,
                     lora_config=lora_config,
                     user_metadata=user_metadata,
+                    debug_train_only=debug_train_only,
+                    checkpoint_path=checkpoint_path,
+                    max_batch_size=max_batch_size,
+                    max_seq_len=max_seq_len,
+                    rlve_config=rlve_config,
+                    objective=objective,
+                    num_labels=num_labels,
+                    head_config=head_config,
+                    staleness_k=staleness_k,
                 )
                 future = await client.models.create(request=request)
             create_model_response = await _APIFuture(
@@ -238,6 +256,15 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         user_metadata: dict[str, str] | None = None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> TrainingClient:
         """Create a TrainingClient for LoRA fine-tuning.
 
@@ -249,6 +276,18 @@ class ServiceClient(TelemetryProvider):
         - `train_attn`: Whether to train attention layers (default True)
         - `train_unembed`: Whether to train unembedding layers (default True)
         - `user_metadata`: Optional metadata to attach to the training run
+
+        TinkerCloud-specific (every one has a server default):
+        - `debug_train_only`: skip inference-engine weight updates
+        - `checkpoint_path`: load this checkpoint while creating the model
+        - `max_batch_size`: max datums per forward_backward without gradient accumulation
+        - `max_seq_len`: max sequence length, used for parallelism decisions
+        - `rlve_config`: server-side RLVE / GRPO native options
+        - `objective`: "language_modeling" (default) | "sequence_classification" |
+          "token_classification"; classification objectives need a classification backend
+        - `num_labels`: number of classes (classification objectives only)
+        - `head_config`: classification head config (e.g. torch_dtype, target_modules)
+        - `staleness_k`: max sampler weight-version staleness the tenant accepts (0 = strict)
 
         Returns:
         - `TrainingClient` configured for LoRA training
@@ -272,6 +311,15 @@ class ServiceClient(TelemetryProvider):
             train_attn,
             train_unembed,
             user_metadata,
+            debug_train_only,
+            checkpoint_path,
+            max_batch_size,
+            max_seq_len,
+            rlve_config,
+            objective=objective,
+            num_labels=num_labels,
+            head_config=head_config,
+            staleness_k=staleness_k,
         ).result()
 
     async def create_lora_training_client_async(
@@ -283,6 +331,15 @@ class ServiceClient(TelemetryProvider):
         train_attn: bool = True,
         train_unembed: bool = True,
         user_metadata: dict[str, str] | None = None,
+        debug_train_only: bool = False,
+        checkpoint_path: str | None = None,
+        max_batch_size: int = 4096,
+        max_seq_len: int = 2048,
+        rlve_config: types.RLVEConfig | None = None,
+        objective: str = "language_modeling",
+        num_labels: int | None = None,
+        head_config: dict[str, Any] | None = None,
+        staleness_k: int = 0,
     ) -> TrainingClient:
         """Async version of create_lora_training_client."""
         return await self._create_lora_training_client_submit(
@@ -293,6 +350,15 @@ class ServiceClient(TelemetryProvider):
             train_attn,
             train_unembed,
             user_metadata,
+            debug_train_only,
+            checkpoint_path,
+            max_batch_size,
+            max_seq_len,
+            rlve_config,
+            objective=objective,
+            num_labels=num_labels,
+            head_config=head_config,
+            staleness_k=staleness_k,
         ).result_async()
 
     def _get_rest_client_for_weights(self, weights_access_token: str | None = None) -> RestClient:
@@ -477,17 +543,8 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,  # loaded during create_model; no load_state round trip
         )
-
-        auth_token = (
-            rest_client.holder.run_coroutine_threadsafe(
-                rest_client.holder._default_auth.get_token()
-            ).result()
-            if weights_access_token is not None
-            else None
-        )
-
-        training_client.load_state(path, weights_access_token=auth_token).result()
         return training_client
 
     async def create_training_client_from_state_async(
@@ -523,12 +580,8 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,  # loaded during create_model; no load_state round trip
         )
-
-        load_future = await training_client.load_state_async(
-            path, weights_access_token=weights_access_token
-        )
-        await load_future.result_async()
         return training_client
 
     @sync_only
@@ -586,11 +639,8 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,  # loaded with optimizer state during create_model
         )
-
-        training_client.load_state_with_optimizer(
-            path, weights_access_token=weights_access_token
-        ).result()
         return training_client
 
     async def create_training_client_from_state_with_optimizer_async(
@@ -626,12 +676,8 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
+            checkpoint_path=path,  # loaded with optimizer state during create_model
         )
-
-        load_future = await training_client.load_state_with_optimizer_async(
-            path, weights_access_token=weights_access_token
-        )
-        await load_future.result_async()
         return training_client
 
     def create_sampling_client(
