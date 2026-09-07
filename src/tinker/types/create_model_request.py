@@ -37,9 +37,6 @@ class CreateModelRequest(StrictBase):
     max_seq_len: int = 2048
     """Max sequence length, used for parallelism decisions (context parallel above 2048)."""
 
-    learning_rate: float = 1e-6
-    """Optimizer learning rate fixed at model creation (Megatron backends)."""
-
     rlve_config: Optional[RLVEConfig] = None
     """Server-side RLVE / GRPO native options."""
 

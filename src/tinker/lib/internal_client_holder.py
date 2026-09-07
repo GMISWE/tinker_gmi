@@ -464,8 +464,7 @@ class InternalClientHolder(AsyncTinkerProvider, TelemetryProvider):
 
     async def _session_heartbeat(self, session_id: str):
         SESSION_HEARTBEAT_PERIOD_SEC = 10
-        # 10 min: model creation with inference-engine KV-cache onload can block the loop for minutes
-        SESSION_MISSED_HEARTBEAT_WARNING_THRESHOLD_SEC = 60 * 10
+        SESSION_MISSED_HEARTBEAT_WARNING_THRESHOLD_SEC = 60 * 2
         last_heartbeat_time = time.monotonic()
         while True:
             await asyncio.sleep(SESSION_HEARTBEAT_PERIOD_SEC)

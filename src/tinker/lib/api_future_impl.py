@@ -446,7 +446,7 @@ class _APIFuture(APIFuture[T]):  # pyright: ignore[reportUnusedClass]
                         request_id=self.request_id,
                         allow_metadata_only=state.allow_metadata_only,
                     ),
-                    timeout=300,  # large results can take longer than 45 s to stream
+                    timeout=45,
                     extra_headers=headers,
                     max_retries=0,
                 )
