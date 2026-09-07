@@ -502,12 +502,6 @@ class ServiceClient(TelemetryProvider):
         This loads only the model weights, not optimizer state. To also restore
         optimizer state (e.g., Adam momentum), use create_training_client_from_state_with_optimizer.
 
-        TinkerCloud loads the checkpoint while creating the model (`checkpoint_path`
-        on create_model) rather than with a separate load_state round trip; the
-        weights-only guarantee is the backend's (Megatron `--load` may also restore
-        optimizer state). `weights_access_token` is accepted but unused: the server
-        resolves the tinker:// path under the caller's own key.
-
         Args:
         - `path`: Tinker path to saved weights (e.g., "tinker://run-id/weights/checkpoint-001")
         - `base_model`: Optional override of the checkpoint's base model; must be
@@ -549,8 +543,17 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
-            checkpoint_path=path,  # loaded during create_model; no load_state round trip
         )
+
+        auth_token = (
+            rest_client.holder.run_coroutine_threadsafe(
+                rest_client.holder._default_auth.get_token()
+            ).result()
+            if weights_access_token is not None
+            else None
+        )
+
+        training_client.load_state(path, weights_access_token=auth_token).result()
         return training_client
 
     async def create_training_client_from_state_async(
@@ -586,8 +589,12 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
-            checkpoint_path=path,  # loaded during create_model; no load_state round trip
         )
+
+        load_future = await training_client.load_state_async(
+            path, weights_access_token=weights_access_token
+        )
+        await load_future.result_async()
         return training_client
 
     @sync_only
@@ -603,10 +610,6 @@ class ServiceClient(TelemetryProvider):
         This is similar to create_training_client_from_state but also restores
         optimizer state (e.g., Adam momentum), which is useful for resuming
         training exactly where it left off.
-
-        TinkerCloud restores it while creating the model (`checkpoint_path` on
-        create_model); its load_weights endpoint refuses optimizer=true, so this
-        is the only resume path the server serves.
 
         Args:
         - `path`: Tinker path to saved weights (e.g., "tinker://run-id/weights/checkpoint-001")
@@ -649,8 +652,11 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
-            checkpoint_path=path,  # loaded with optimizer state during create_model
         )
+
+        training_client.load_state_with_optimizer(
+            path, weights_access_token=weights_access_token
+        ).result()
         return training_client
 
     async def create_training_client_from_state_with_optimizer_async(
@@ -686,8 +692,12 @@ class ServiceClient(TelemetryProvider):
             train_mlp=weights_info.train_mlp if weights_info.train_mlp is not None else True,
             train_attn=weights_info.train_attn if weights_info.train_attn is not None else True,
             user_metadata=user_metadata,
-            checkpoint_path=path,  # loaded with optimizer state during create_model
         )
+
+        load_future = await training_client.load_state_with_optimizer_async(
+            path, weights_access_token=weights_access_token
+        )
+        await load_future.result_async()
         return training_client
 
     def create_sampling_client(
